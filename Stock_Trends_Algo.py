@@ -1,19 +1,9 @@
-
-# coding: utf-8
-
-# In[1]:
-
 import pandas as pd
-#from pandas_datareader import data
 import datetime
-#get_ipython().magic('matplotlib inline')
 import matplotlib.pyplot as plt
 import fix_yahoo_finance as yf
 from pytrends.request import TrendReq
 import numpy as np
-#import newsapia
-#from newsapi.articles import Articles
-#from newsapi import NewsApiClient
 import requests
 from pytrends.request import TrendReq
 import numpy as np
@@ -23,29 +13,13 @@ from itertools import count
 from collections import OrderedDict
 from scipy import stats
 import seaborn as sns
-# from pandas.tools.plotting import table
-#from sklearn.model_selection import cross_val_score
-#import sklearn.metrics as skmetric
+
 
 
 pd.options.mode.chained_assignment = None
 import math
 import sqlite3
 
-###TODO:
-### - Redefine crossed_line so you can just test 1 date and backtest, and add actual price diff
-### backtest idea: add all sells up, subtract from buys and neutralizes (this only counts shorts)... Can do same other way around and add 2 numbers together
-### if you do idea above will either have to change if consecutive buys or account for number of shares you must neutralize
-### Add new script where you just test the current day/week
-
-# #### Notes: Good to run. Now can see buy only profit. Recommend using the specific start date to set testing threshold when making purchases. + recommend backtesting at least once for each stock.
-
-# ## Stock Data
-
-# ### Pull from diff dates every time 
-# #### - just pull from these dates first and resample and get number of rows, then split and pull from those dates in the split
-
-# In[19]:
 
 
 stock = 'IMGN'
@@ -74,24 +48,10 @@ amd.index = pd.to_datetime(amd.index)
 
 weekly_amd = pd.DataFrame(amd.resample('W').first().shift(periods = -1, freq = 'W'))
 
-# new_price = pd.Series({'Open' : 160.87})
-# new_price.name = datetime.datetime(2019,5,12)
-# weekly_amd = weekly_amd.append(new_price)
 
 
-# ## Google Trends Data
 
-# #### Why does relative trend score fuck it up?
-# #### 1. not huge problem, but normalizing twice
-# #### 2. recommendations change for shifts in time ranges (because "num_searches" changes for train and test data)
-# ##### Must shift time ranges in order to test present data
-# #### 3. Since test recommendation isn't same as real recommendation, can't label it as an accurate test
-# #### Solutions:
-# #### - re-collect the trands data for every single testing datapoint
-# 
-# #### TODO:
-# #### - Figure out way to split between train and test (just mark a date) but then fit train to everything before the last value and test the last value.
-# #### - have buy and sell values populated after each run (maybe make new dataframe, appending each answer column to train, where applicable
+
 table_name_trend = 'trend_'+stock+start+end
 table_name_trend = table_name_trend.replace('-', '_')
 try:
@@ -106,66 +66,23 @@ except:
     amd_trend = amd_trend[[stock]]
     amd_trend.to_sql(table_name_trend, con = con)
     amd_trend.index = pd.to_datetime(amd_trend.index)
-    #cur.execute('CREATE TABLE '+table_name_trend+' (date STRING, price NUMBER, reco TEXT, simple_reco TEXT)')
     print('cached')
 
-# new_trend = pd.Series({stock : 0})
-# new_trend.name = datetime.datetime(2019,5,12)
-# amd_trend = amd_trend.append(new_trend)
 
 amd_trend = amd_trend.shift(periods = 1, freq = 'W')
 print(amd_trend.tail())
 combined = weekly_amd.merge(amd_trend, left_index = True, right_index = True, how = 'outer')
 print(combined.tail())
 df_amd = combined.rename(columns = {'Open': 'price', stock: 'num_searches'})
-df_amd = df_amd.dropna() #only drops first and last date which don't match up
+df_amd = df_amd.dropna() 
 # df_amd.head()
 
 rolling_price = df_amd['price'].rolling(window = 5, center = True, min_periods = 1)
 rolling_trend = df_amd['num_searches'].rolling(window = 5, center = True, min_periods = 1)
 df_amd['rolling_price'] = rolling_price.mean()
 df_amd['rolling_trend'] = rolling_trend.mean()
-# df_amd.head()
-
-
-###KEEP below
-
-#df_amd.loc['2019-05-5', 'price'] = 174.66
-
-#df_amd.loc['2019-01-27', 'num_searches'] = 30
-
-
-# ## Cross correlation
-
-# In[528]:
-
-# ccf = sm.tsa.stattools.ccf(df_amd['num_searches'], df_amd['price'] )
-
-# plt.plot(ccf)
-# plt.xlim(-30,50)
-# plt.ylim(-2, 0.9)
-# plt.axhline(0, color="black", linewidth=1)
-# plt.title('Cross Correlation: "num_searches" vs. "price"')
-# plt.xlabel('lag')
-# plt.ylabel('correlation')
-
-
-
-# ### cross correlation confirms no lag
-
-# In[530]:
 
 print(np.corrcoef(df_amd['num_searches'], df_amd['price']))
-
-
-# #### High correlation between number of searches and price for this time interval
-
-# In[531]:
-
-# df_amd.plot()
-
-
-# In[532]:
 
 plt.plot(df_amd[['price', 'rolling_price']])
 plt.title('Price and Rolling Price over time for '+stock)
@@ -173,7 +90,6 @@ plt.xlabel('Date')
 plt.ylabel('Price')
 
 
-# # In[533]:
 
 plt.plot(df_amd[['num_searches', 'rolling_trend']])
 plt.title('Trend and Rolling Trend over time for '+stock)
@@ -181,14 +97,10 @@ plt.xlabel('Date')
 plt.ylabel('Number of Searches')
 
 
-# In[534]:
 
 df_amd['trend_diff'] = df_amd['num_searches'] - df_amd['rolling_trend']
 df_amd['price_diff'] = df_amd['price'] - df_amd['rolling_price']
 
-# threshold = int(.7 * len(df_amd))
-# df_train_whole = df_amd[:threshold]
-# df_test_whole = df_amd[threshold:]
 df_train_whole = df_amd[:-1]
 df_test_whole = df_amd[-1:]
 reco_list = []
@@ -240,51 +152,31 @@ for i in range(0, len(df_test_whole)-1):
         #cur.execute('CREATE TABLE '+table_name_trend+' (date STRING, price NUMBER, reco TEXT, simple_reco TEXT)')
         print('cached')
 
-    # pytrends = TrendReq(hl='en-US', tz=360, timeout = 10)
 
-
-
-    # kw_list = [stock] #can try with neg and pos phrases like "buy amd", "sell amd"
-    # pytrends.build_payload(kw_list, cat = 7, timeframe=start + ' ' + end)
-
-
-
-    # amd_trend = pytrends.interest_over_time()
-    # amd_trend = amd_trend[[stock]]
-
-    # new_trend = pd.Series({stock : 0})
-    # new_trend.name = datetime.datetime(2019,5,12)
-    # amd_trend = amd_trend.append(new_trend)
 
     amd_trend = amd_trend.shift(periods = 1, freq = 'W')
     combined = weekly_amd.merge(amd_trend, left_index = True, right_index = True, how = 'outer')
 
     df_amd = combined.rename(columns = {'Open': 'price', stock: 'num_searches'})
     df_amd = df_amd.dropna() #only drops first and last date which don't match up
-    # df_amd.head()
-    #Change final price here
-    #df_amd.loc['2019-05-5', 'price'] = 174.66
+
 
     rolling_price = df_amd['price'].rolling(window = 5, center = True, min_periods = 1)
     rolling_trend = df_amd['num_searches'].rolling(window = 5, center = True, min_periods = 1)
     df_amd['rolling_price'] = rolling_price.mean()
     df_amd['rolling_trend'] = rolling_trend.mean()
 
-    #rt_diff = [0]
     td_diff = [0]
     for i in range(len(df_amd)-1):
         td_diff.append(df_amd.rolling_trend.iloc[i+1] - df_amd.rolling_trend.iloc[i])
     df_amd['td_diff'] = td_diff
 
-    #rp_diff = [0]
     pd_diff = [0]
     for i in range(len(df_amd)-1):
         pd_diff.append(df_amd.rolling_price.iloc[i+1] - df_amd.rolling_price.iloc[i])
     df_amd['pd_diff'] = pd_diff
 
 
-    # df_amd.head()
-    #ccf = sm.tsa.stattools.ccf(df_amd['num_searches'], df_amd['price'] )
     print('trend v price correlation')
     print(np.corrcoef(df_amd['num_searches'], df_amd['price']))
     print('rolling trend v price correlation')
@@ -307,17 +199,12 @@ for i in range(0, len(df_test_whole)-1):
     print('trend v price diff')
     print(np.corrcoef(df_amd['trend_diff'], df_amd['price_diff']))
 
-    # ccf = sm.tsa.stattools.ccf(df_amd['trend_diff'], df_amd['price_diff'] )
-    # print(ccf[0:5])
-
 
     print('trend v price diff derivative')
     print(np.corrcoef(df_amd['td_diff'], df_amd['pd_diff']))
     ccf = sm.tsa.stattools.ccf(df_amd['td_diff'], df_amd['pd_diff'] )
     print(ccf[0:5])
 
-    #print(df_amd.tail())
-    #label train and test split conditional on i
 
     df_train = df_amd.iloc[:-1]
     df_test = df_amd.iloc[-1:]
@@ -330,7 +217,6 @@ for i in range(0, len(df_test_whole)-1):
     trend_diff_std = np.std(df_train_norm['trend_diff'])
     price_diff_std = np.std(df_train_norm['price_diff'])
 
-    # df_train_norm.iloc[:,4:6] = df_train_norm.apply(lambda x: (x-np.mean(x))/np.std(x))
     df_train_norm['trend_diff'] = (df_train_norm['trend_diff'] - trend_diff_mean) / trend_diff_std
     df_train_norm['price_diff'] = (df_train_norm['price_diff'] - price_diff_mean) / price_diff_std
     print('normalized trend v price diff')
@@ -368,16 +254,7 @@ for i in range(0, len(df_test_whole)-1):
 
 
 
-    # ccf = sm.tsa.stattools.ccf(df_amd['td_diff'], df_amd['pd_diff'] )
-    # print(ccf[0:5])
 
-    #Extract interval ranges from training data
-    '''
-    pd_q75, pd_q60, pd_q40, pd_q25 = np.percentile(df_train_norm['price_diff'], [75, 60, 40, 25])
-    td_q75, td_q60, td_q40, td_q25 = np.percentile(df_train_norm['trend_diff'], [75, 60, 40, 25])
-    '''
-
-    #derivative
     pd_q75, pd_q60, pd_q40, pd_q25 = np.percentile(df_train_norm['pd_diff'], [99.9, 60, 40, .1])
     td_q75, td_q60, td_q40, td_q25 = np.percentile(df_train_norm['td_diff'], [99.9, 60, 40, .1])
 
